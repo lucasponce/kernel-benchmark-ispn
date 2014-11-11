@@ -22,7 +22,6 @@ import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
-import java.util.logging.Logger;
 
 import org.exoplatform.container.PortalContainer;
 import org.exoplatform.services.cache.CacheService;

@@ -37,20 +37,17 @@ public class HttpThread extends Thread {
     final String name;
     final CountDownLatch startSignal;
     final CountDownLatch doneSignal;
-    final int requestForWritting;
     final int pageSize = 1024 * 10;
 
     public HttpThread(CountDownLatch startSignal,
                       CountDownLatch doneSignal,
                       AbstractExoCache<Serializable, Object> cache,
                       int numRequests,
-                      int requestForWritting,
                       String name) {
         super(name);
         this.name = name;
         this.cache = cache;
         this.numRequests = numRequests;
-        this.requestForWritting = requestForWritting;
         this.startSignal = startSignal;
         this.doneSignal = doneSignal;
     }
@@ -64,11 +61,7 @@ public class HttpThread extends Thread {
             long start = System.currentTimeMillis();
 
             for (int i = 0; i < numRequests; i++) {
-                if ( i < requestForWritting) {
-                    createPage();
-                } else {
-                    readPage();
-                }
+                readAndCreate();
             }
 
             long stop = System.currentTimeMillis();
@@ -95,12 +88,11 @@ public class HttpThread extends Thread {
         }
     }
 
-    public void readPage() {
+    public void readAndCreate() {
         MyKey dummyKey = new MyKey("DummyKey");
-        try {
-            cache.get(dummyKey);
-        } catch (Exception e) {
-            LOG.error("Error on readPage(): " + e.getMessage(), e);
+        String page = (String)cache.get(dummyKey);
+        if (page == null) {
+            createPage();
         }
     }
 }

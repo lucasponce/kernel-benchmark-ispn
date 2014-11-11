@@ -19,6 +19,9 @@
 package org.gatein.benchmark;
 
 import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.logging.Logger;
 
 import org.exoplatform.container.PortalContainer;
@@ -32,45 +35,73 @@ import org.exoplatform.services.log.Log;
  */
 public class BenchMark {
 
-    private static final Log LOG = ExoLogger.getLogger("BenchMark");
+    static final Log LOG = ExoLogger.getLogger("BenchMark");
+
+    static CacheService service;
+    static AbstractExoCache<Serializable, Object> cache;
+
+    public static void initCache() throws Exception {
+        service = PortalContainer.getInstance().getComponentInstanceOfType(CacheService.class);
+        cache = (AbstractExoCache<Serializable, Object>)service.getCacheInstance("BenchMarkCache");
+    }
+
+    public static void syncCluster(String node, int clusterSize) throws Exception {
+        Set<String> topology = (Set<String>)cache.get("topology");
+        while (topology == null || topology.size() < clusterSize) {
+            if (topology == null) {
+                topology = new HashSet<String>();
+                topology.add(node);
+                cache.put("topology", topology);
+            } else {
+                if (!topology.contains(node)) {
+                    topology.add(node);
+                    cache.put("topology", topology);
+                }
+            }
+            Thread.sleep(2 * 1000);
+            topology = (Set<String>)cache.get("topology");
+        }
+    }
 
     public static void main(String[] args) throws Exception {
-        String name = null;
-        int delay = 1;
-        int nThreads = 100;
 
-        if (args.length != 3) {
-            System.out.println("\n\n Use: run.sh <name> <delay_to_start> <clients_per_node> <duration_of_test>\n\n");
-            System.exit(1);
-        } else {
-            name = args[0];
-            delay = new Integer(args[1]);
+        String node = "single";
+        int clusterSize = 1;
+        int nThreads = 10;
+        int nRequestPerThread = 10;
+        boolean finish = false;
+
+        if (args.length == 5) {
+            node = args[0];
+            clusterSize = new Integer(args[1]);
             nThreads = new Integer(args[2]);
+            nRequestPerThread = new Integer(args[3]);
+            finish = new Boolean(args[4]);
         }
 
-        Thread.currentThread().setName(name);
+        LOG.info("-> Test using " + nThreads + " threads and " + nRequestPerThread + " request/thread");
 
-        CacheService service = PortalContainer.getInstance().getComponentInstanceOfType(CacheService.class);
-        AbstractExoCache<Serializable, Object> cache = (AbstractExoCache<Serializable, Object>)service.getCacheInstance("BenchMarkCache");
-        MyListener myListener = new MyListener(name);
-        cache.addCacheListener(myListener);
+        initCache();
+        syncCluster(node, clusterSize);
 
-        LOG.info("Waiting " + delay + " seconds before to start test...");
+        CountDownLatch startSignal = new CountDownLatch(1);
+        CountDownLatch doneSignal = new CountDownLatch(nThreads);
 
-        Thread.sleep(delay * 1000);
-
-        LOG.info("Starting test...");
-
-        final String myKey = "myKey";
-
-        while (true) {
-
-            String data = (String)cache.get(myKey);
-            LOG.info("Key: " + myKey + " Value: " + data);
-
-            cache.put(myKey, name);
-            Thread.sleep((long)(Math.random() * 1000 * 3));
+        for (int i = 0; i < nThreads; i++) {
+            new HttpThread(startSignal, doneSignal, cache, nRequestPerThread, "HttpThread-" + i).start();
         }
 
+        long start = System.currentTimeMillis();
+
+        startSignal.countDown();
+        doneSignal.await();
+
+        long stop = System.currentTimeMillis();
+
+        LOG.info("-> Test took " + (stop - start) + " miliseconds ");
+
+        if (finish) {
+            System.exit(0);
+        }
     }
 }

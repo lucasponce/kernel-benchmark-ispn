@@ -47,7 +47,7 @@
     <init-params>
       <value-param>
         <name>cache.config.template</name>
-        <value>jar:/conf/portal/infinispan-configuration.xml</value>
+        <value>jar:/conf/portal/cache-configuration-template.xml</value>
       </value-param>
     </init-params>
   </component>
